@@ -1,22 +1,43 @@
 """
 Provides various throttling policies.
 """
-from __future__ import unicode_literals
-from django.core.cache import cache as default_cache
-from django.core.exceptions import ImproperlyConfigured
-from rest_framework.settings import api_settings
 import time
 
+from django.core.cache import cache as default_cache
+from django.core.exceptions import ImproperlyConfigured
 
-class BaseThrottle(object):
+from rest_framework.settings import api_settings
+
+
+class BaseThrottle:
     """
     Rate throttling of requests.
     """
+
     def allow_request(self, request, view):
         """
         Return `True` if the request should be allowed, `False` otherwise.
         """
         raise NotImplementedError('.allow_request() must be overridden')
+
+    def get_ident(self, request):
+        """
+        Identify the machine making the request by parsing HTTP_X_FORWARDED_FOR
+        if present and number of proxies is > 0. If not use all of
+        HTTP_X_FORWARDED_FOR if it is available, if not use REMOTE_ADDR.
+        """
+        xff = request.META.get('HTTP_X_FORWARDED_FOR')
+        remote_addr = request.META.get('REMOTE_ADDR')
+        num_proxies = api_settings.NUM_PROXIES
+
+        if num_proxies is not None:
+            if num_proxies == 0 or xff is None:
+                return remote_addr
+            addrs = xff.split(',')
+            client_addr = addrs[-min(num_proxies, len(addrs))]
+            return client_addr.strip()
+
+        return ''.join(xff.split()) if xff else remote_addr
 
     def wait(self):
         """
@@ -31,17 +52,16 @@ class SimpleRateThrottle(BaseThrottle):
     A simple cache implementation, that only requires `.get_cache_key()`
     to be overridden.
 
-    The rate (requests / seconds) is set by a `throttle` attribute on the View
+    The rate (requests / seconds) is set by a `rate` attribute on the View
     class.  The attribute is a string of the form 'number_of_requests/period'.
 
     Period should be one of: ('s', 'sec', 'm', 'min', 'h', 'hour', 'd', 'day')
 
     Previous request information used for throttling is stored in the cache.
     """
-
     cache = default_cache
     timer = time.time
-    cache_format = 'throtte_%(scope)s_%(ident)s'
+    cache_format = 'throttle_%(scope)s_%(ident)s'
     scope = None
     THROTTLE_RATES = api_settings.DEFAULT_THROTTLE_RATES
 
@@ -151,18 +171,12 @@ class AnonRateThrottle(SimpleRateThrottle):
     scope = 'anon'
 
     def get_cache_key(self, request, view):
-        if request.user.is_authenticated():
+        if request.user.is_authenticated:
             return None  # Only throttle unauthenticated requests.
-
-        ident = request.META.get('HTTP_X_FORWARDED_FOR')
-        if ident is None:
-            ident = request.META.get('REMOTE_ADDR')
-        else:
-            ident = ''.join(ident.split())
 
         return self.cache_format % {
             'scope': self.scope,
-            'ident': ident
+            'ident': self.get_ident(request)
         }
 
 
@@ -177,10 +191,10 @@ class UserRateThrottle(SimpleRateThrottle):
     scope = 'user'
 
     def get_cache_key(self, request, view):
-        if request.user.is_authenticated():
-            ident = request.user.id
+        if request.user.is_authenticated:
+            ident = request.user.pk
         else:
-            ident = request.META.get('REMOTE_ADDR', None)
+            ident = self.get_ident(request)
 
         return self.cache_format % {
             'scope': self.scope,
@@ -216,7 +230,7 @@ class ScopedRateThrottle(SimpleRateThrottle):
         self.num_requests, self.duration = self.parse_rate(self.rate)
 
         # We can now proceed as normal.
-        return super(ScopedRateThrottle, self).allow_request(request, view)
+        return super().allow_request(request, view)
 
     def get_cache_key(self, request, view):
         """
@@ -225,10 +239,10 @@ class ScopedRateThrottle(SimpleRateThrottle):
         Otherwise generate the unique cache key by concatenating the user id
         with the '.throttle_scope` property of the view.
         """
-        if request.user.is_authenticated():
-            ident = request.user.id
+        if request.user.is_authenticated:
+            ident = request.user.pk
         else:
-            ident = request.META.get('REMOTE_ADDR', None)
+            ident = self.get_ident(request)
 
         return self.cache_format % {
             'scope': self.scope,

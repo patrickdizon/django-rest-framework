@@ -1,18 +1,104 @@
 """
 Provides a set of pluggable permission policies.
 """
-from __future__ import unicode_literals
-import inspect
-import warnings
-
-SAFE_METHODS = ['GET', 'HEAD', 'OPTIONS']
-
 from django.http import Http404
-from rest_framework.compat import (get_model_name, oauth2_provider_scope,
-                                   oauth2_constants)
+
+from rest_framework import exceptions
+
+SAFE_METHODS = ('GET', 'HEAD', 'OPTIONS')
 
 
-class BasePermission(object):
+class OperationHolderMixin:
+    def __and__(self, other):
+        return OperandHolder(AND, self, other)
+
+    def __or__(self, other):
+        return OperandHolder(OR, self, other)
+
+    def __rand__(self, other):
+        return OperandHolder(AND, other, self)
+
+    def __ror__(self, other):
+        return OperandHolder(OR, other, self)
+
+    def __invert__(self):
+        return SingleOperandHolder(NOT, self)
+
+
+class SingleOperandHolder(OperationHolderMixin):
+    def __init__(self, operator_class, op1_class):
+        self.operator_class = operator_class
+        self.op1_class = op1_class
+
+    def __call__(self, *args, **kwargs):
+        op1 = self.op1_class(*args, **kwargs)
+        return self.operator_class(op1)
+
+
+class OperandHolder(OperationHolderMixin):
+    def __init__(self, operator_class, op1_class, op2_class):
+        self.operator_class = operator_class
+        self.op1_class = op1_class
+        self.op2_class = op2_class
+
+    def __call__(self, *args, **kwargs):
+        op1 = self.op1_class(*args, **kwargs)
+        op2 = self.op2_class(*args, **kwargs)
+        return self.operator_class(op1, op2)
+
+
+class AND:
+    def __init__(self, op1, op2):
+        self.op1 = op1
+        self.op2 = op2
+
+    def has_permission(self, request, view):
+        return (
+            self.op1.has_permission(request, view) and
+            self.op2.has_permission(request, view)
+        )
+
+    def has_object_permission(self, request, view, obj):
+        return (
+            self.op1.has_object_permission(request, view, obj) and
+            self.op2.has_object_permission(request, view, obj)
+        )
+
+
+class OR:
+    def __init__(self, op1, op2):
+        self.op1 = op1
+        self.op2 = op2
+
+    def has_permission(self, request, view):
+        return (
+            self.op1.has_permission(request, view) or
+            self.op2.has_permission(request, view)
+        )
+
+    def has_object_permission(self, request, view, obj):
+        return (
+            self.op1.has_object_permission(request, view, obj) or
+            self.op2.has_object_permission(request, view, obj)
+        )
+
+
+class NOT:
+    def __init__(self, op1):
+        self.op1 = op1
+
+    def has_permission(self, request, view):
+        return not self.op1.has_permission(request, view)
+
+    def has_object_permission(self, request, view, obj):
+        return not self.op1.has_object_permission(request, view, obj)
+
+
+class BasePermissionMetaclass(OperationHolderMixin, type):
+    pass
+
+
+class BasePermission(metaclass=BasePermissionMetaclass):
     """
     A base class from which all permission classes should inherit.
     """
@@ -27,13 +113,6 @@ class BasePermission(object):
         """
         Return `True` if permission is granted, `False` otherwise.
         """
-        if len(inspect.getargspec(self.has_permission).args) == 4:
-            warnings.warn(
-                'The `obj` argument in `has_permission` is deprecated. '
-                'Use `has_object_permission()` instead for object permissions.',
-                DeprecationWarning, stacklevel=2
-            )
-            return self.has_permission(request, view, obj)
         return True
 
 
@@ -44,6 +123,7 @@ class AllowAny(BasePermission):
     permission_classes list, but it's useful because it makes the intention
     more explicit.
     """
+
     def has_permission(self, request, view):
         return True
 
@@ -54,7 +134,7 @@ class IsAuthenticated(BasePermission):
     """
 
     def has_permission(self, request, view):
-        return request.user and request.user.is_authenticated()
+        return bool(request.user and request.user.is_authenticated)
 
 
 class IsAdminUser(BasePermission):
@@ -63,7 +143,7 @@ class IsAdminUser(BasePermission):
     """
 
     def has_permission(self, request, view):
-        return request.user and request.user.is_staff
+        return bool(request.user and request.user.is_staff)
 
 
 class IsAuthenticatedOrReadOnly(BasePermission):
@@ -72,9 +152,11 @@ class IsAuthenticatedOrReadOnly(BasePermission):
     """
 
     def has_permission(self, request, view):
-        return (request.method in SAFE_METHODS or 
-            request.user and 
-            request.user.is_authenticated())
+        return bool(
+            request.method in SAFE_METHODS or
+            request.user and
+            request.user.is_authenticated
+        )
 
 
 class DjangoModelPermissions(BasePermission):
@@ -86,7 +168,7 @@ class DjangoModelPermissions(BasePermission):
     `add`/`change`/`delete` permissions on the model.
 
     This permission can only be applied against view classes that
-    provide a `.model` or `.queryset` attribute.
+    provide a `.queryset` attribute.
     """
 
     # Map methods into required permission codes.
@@ -111,30 +193,43 @@ class DjangoModelPermissions(BasePermission):
         """
         kwargs = {
             'app_label': model_cls._meta.app_label,
-            'model_name': get_model_name(model_cls)
+            'model_name': model_cls._meta.model_name
         }
+
+        if method not in self.perms_map:
+            raise exceptions.MethodNotAllowed(method)
+
         return [perm % kwargs for perm in self.perms_map[method]]
 
+    def _queryset(self, view):
+        assert hasattr(view, 'get_queryset') \
+            or getattr(view, 'queryset', None) is not None, (
+            'Cannot apply {} on a view that does not set '
+            '`.queryset` or have a `.get_queryset()` method.'
+        ).format(self.__class__.__name__)
+
+        if hasattr(view, 'get_queryset'):
+            queryset = view.get_queryset()
+            assert queryset is not None, (
+                '{}.get_queryset() returned None'.format(view.__class__.__name__)
+            )
+            return queryset
+        return view.queryset
+
     def has_permission(self, request, view):
-        model_cls = getattr(view, 'model', None)
-        queryset = getattr(view, 'queryset', None)
-
-        if model_cls is None and queryset is not None:
-            model_cls = queryset.model
-
         # Workaround to ensure DjangoModelPermissions are not applied
         # to the root view when using DefaultRouter.
-        if model_cls is None and getattr(view, '_ignore_model_permissions', False):
+        if getattr(view, '_ignore_model_permissions', False):
             return True
 
-        assert model_cls, ('Cannot apply DjangoModelPermissions on a view that'
-                           ' does not have `.model` or `.queryset` property.')
+        if not request.user or (
+           not request.user.is_authenticated and self.authenticated_users_only):
+            return False
 
-        perms = self.get_required_permissions(request.method, model_cls)
+        queryset = self._queryset(view)
+        perms = self.get_required_permissions(request.method, queryset.model)
 
-        return (request.user and
-            (request.user.is_authenticated() or not self.authenticated_users_only) and
-            request.user.has_perms(perms))
+        return request.user.has_perms(perms)
 
 
 class DjangoModelPermissionsOrAnonReadOnly(DjangoModelPermissions):
@@ -154,9 +249,8 @@ class DjangoObjectPermissions(DjangoModelPermissions):
     `add`/`change`/`delete` permissions on the object using .has_perms.
 
     This permission can only be applied against view classes that
-    provide a `.model` or `.queryset` attribute.
+    provide a `.queryset` attribute.
     """
-
     perms_map = {
         'GET': [],
         'OPTIONS': [],
@@ -170,26 +264,28 @@ class DjangoObjectPermissions(DjangoModelPermissions):
     def get_required_object_permissions(self, method, model_cls):
         kwargs = {
             'app_label': model_cls._meta.app_label,
-            'model_name': get_model_name(model_cls)
+            'model_name': model_cls._meta.model_name
         }
+
+        if method not in self.perms_map:
+            raise exceptions.MethodNotAllowed(method)
+
         return [perm % kwargs for perm in self.perms_map[method]]
 
     def has_object_permission(self, request, view, obj):
-        model_cls = getattr(view, 'model', None)
-        queryset = getattr(view, 'queryset', None)
-
-        if model_cls is None and queryset is not None:
-            model_cls = queryset.model
+        # authentication checks have already executed via has_permission
+        queryset = self._queryset(view)
+        model_cls = queryset.model
+        user = request.user
 
         perms = self.get_required_object_permissions(request.method, model_cls)
-        user = request.user
 
         if not user.has_perms(perms, obj):
             # If the user does not have permissions we need to determine if
             # they have read permissions to see 403, or not, and simply see
-            # a 404 reponse.
+            # a 404 response.
 
-            if request.method in ('GET', 'OPTIONS', 'HEAD'):
+            if request.method in SAFE_METHODS:
                 # Read permissions already checked and failed, no need
                 # to make another lookup.
                 raise Http404
@@ -202,26 +298,3 @@ class DjangoObjectPermissions(DjangoModelPermissions):
             return False
 
         return True
-
-
-class TokenHasReadWriteScope(BasePermission):
-    """
-    The request is authenticated as a user and the token used has the right scope
-    """
-
-    def has_permission(self, request, view):
-        token = request.auth
-        read_only = request.method in SAFE_METHODS
-
-        if not token:
-            return False
-
-        if hasattr(token, 'resource'):  # OAuth 1
-            return read_only or not request.auth.resource.is_readonly
-        elif hasattr(token, 'scope'):  # OAuth 2
-            required = oauth2_constants.READ if read_only else oauth2_constants.WRITE
-            return oauth2_provider_scope.check(required, request.auth.scope)
-
-        assert False, ('TokenHasReadWriteScope requires either the'
-        '`OAuthAuthentication` or `OAuth2Authentication` authentication '
-        'class to be used.')

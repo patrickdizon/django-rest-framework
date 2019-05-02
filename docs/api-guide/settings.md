@@ -1,4 +1,4 @@
-<a class="github" href="settings.py"></a>
+source: settings.py
 
 # Settings
 
@@ -12,10 +12,10 @@ For example your project's `settings.py` file might include something like this:
 
     REST_FRAMEWORK = {
         'DEFAULT_RENDERER_CLASSES': (
-            'rest_framework.renderers.YAMLRenderer',
+            'rest_framework.renderers.JSONRenderer',
         ),
         'DEFAULT_PARSER_CLASSES': (
-            'rest_framework.parsers.YAMLParser',
+            'rest_framework.parsers.JSONParser',
         )
     }
 
@@ -26,7 +26,7 @@ you should use the `api_settings` object.  For example.
 
     from rest_framework.settings import api_settings
 
-    print api_settings.DEFAULT_AUTHENTICATION_CLASSES
+    print(api_settings.DEFAULT_AUTHENTICATION_CLASSES)
 
 The `api_settings` object will check for any user-defined settings, and otherwise fall back to the default values.  Any setting that uses string import paths to refer to a class will automatically import and return the referenced class, instead of the string literal.
 
@@ -36,7 +36,7 @@ The `api_settings` object will check for any user-defined settings, and otherwis
 
 ## API policy settings
 
-*The following settings control the basic API policies, and are applied to every `APIView` class based view, or `@api_view` function based view.*
+*The following settings control the basic API policies, and are applied to every `APIView` class-based view, or `@api_view` function based view.*
 
 #### DEFAULT_RENDERER_CLASSES
 
@@ -51,7 +51,7 @@ Default:
 
 #### DEFAULT_PARSER_CLASSES
 
-A list or tuple of parser classes, that determines the default set of parsers used when accessing the `request.DATA` property.
+A list or tuple of parser classes, that determines the default set of parsers used when accessing the `request.data` property.
 
 Default:
 
@@ -74,7 +74,7 @@ Default:
 
 #### DEFAULT_PERMISSION_CLASSES
 
-A list or tuple of permission classes, that determines the default set of permissions checked at the start of a view.
+A list or tuple of permission classes, that determines the default set of permissions checked at the start of a view. Permission must be granted by every class in the list.
 
 Default:
 
@@ -94,23 +94,29 @@ A content negotiation class, that determines how a renderer is selected for the 
 
 Default: `'rest_framework.negotiation.DefaultContentNegotiation'`
 
+#### DEFAULT_SCHEMA_CLASS
+
+A view inspector class that will be used for schema generation.
+
+Default: `'rest_framework.schemas.AutoSchema'`
+
 ---
 
 ## Generic view settings
 
-*The following settings control the behavior of the generic class based views.*
-
-#### DEFAULT_MODEL_SERIALIZER_CLASS
-
-A class that determines the default type of model serializer that should be used by a generic view if `model` is specified, but `serializer_class` is not provided.
-
-Default: `'rest_framework.serializers.ModelSerializer'`
+*The following settings control the behavior of the generic class-based views.*
 
 #### DEFAULT_PAGINATION_SERIALIZER_CLASS
 
-A class the determines the default serialization style for paginated responses.
+---
 
-Default: `rest_framework.pagination.PaginationSerializer`
+**This setting has been removed.**
+
+The pagination API does not use serializers to determine the output format, and
+you'll need to instead override the `get_paginated_response method on a
+pagination class in order to specify how the output format is controlled.
+
+---
 
 #### DEFAULT_FILTER_BACKENDS
 
@@ -119,56 +125,73 @@ If set to `None` then generic filtering is disabled.
 
 #### PAGINATE_BY
 
+---
+
+**This setting has been removed.**
+
+See the pagination documentation for further guidance on [setting the pagination style](pagination.md#modifying-the-pagination-style).
+
+---
+
+#### PAGE_SIZE
+
 The default page size to use for pagination.  If set to `None`, pagination is disabled by default.
 
 Default: `None`
 
 #### PAGINATE_BY_PARAM
 
-The name of a query parameter, which can be used by the client to override the default page size to use for pagination.  If set to `None`, clients may not override the default page size.
+---
 
-For example, given the following settings:
+**This setting has been removed.**
 
-    REST_FRAMEWORK = {
-    	'PAGINATE_BY': 10,
-    	'PAGINATE_BY_PARAM': 'page_size',
-    }
+See the pagination documentation for further guidance on [setting the pagination style](pagination.md#modifying-the-pagination-style).
 
-A client would be able to modify the pagination size by using the `page_size` query parameter.  For example:
-
-    GET http://example.com/api/accounts?page_size=25
-
-Default: `None`
+---
 
 #### MAX_PAGINATE_BY
 
-The maximum page size to allow when the page size is specified by the client.  If set to `None`, then no maximum limit is applied.
+---
 
-For example, given the following settings:
+**This setting has been removed.**
 
-    REST_FRAMEWORK = {
-    	'PAGINATE_BY': 10,
-    	'PAGINATE_BY_PARAM': 'page_size',
-        'MAX_PAGINATE_BY': 100
-    }
+See the pagination documentation for further guidance on [setting the pagination style](pagination.md#modifying-the-pagination-style).
 
-A client request like the following would return a paginated list of up to 100 items.
-
-    GET http://example.com/api/accounts?page_size=999
-
-Default: `None`
+---
 
 ### SEARCH_PARAM
 
-The name of a query paramater, which can be used to specify the search term used by `SearchFilter`.
+The name of a query parameter, which can be used to specify the search term used by `SearchFilter`.
 
 Default: `search`
 
 #### ORDERING_PARAM
 
-The name of a query paramater, which can be used to specify the ordering of results returned by `OrderingFilter`.
+The name of a query parameter, which can be used to specify the ordering of results returned by `OrderingFilter`.
 
 Default: `ordering`
+
+---
+
+## Versioning settings
+
+#### DEFAULT_VERSION
+
+The value that should be used for `request.version` when no versioning information is present.
+
+Default: `None`
+
+#### ALLOWED_VERSIONS
+
+If set, this value will restrict the set of versions that may be returned by the versioning scheme, and will raise an error if the provided version if not in this set.
+
+Default: `None`
+
+#### VERSION_PARAM
+
+The string that should used for any versioning parameters, such as in the media type or URL query parameters.
+
+Default: `'version'`
 
 ---
 
@@ -179,6 +202,8 @@ Default: `ordering`
 #### UNAUTHENTICATED_USER
 
 The class that should be used to initialize `request.user` for unauthenticated requests.
+(If removing authentication entirely, e.g. by removing `django.contrib.auth` from
+`INSTALLED_APPS`, set `UNAUTHENTICATED_USER` to `None`.)
 
 Default: `django.contrib.auth.models.AnonymousUser`
 
@@ -217,45 +242,45 @@ Default:
 
 ---
 
-## Browser overrides
+## Schema generation controls
 
-*The following settings provide URL or form-based overrides of the default browser behavior.*
+#### SCHEMA_COERCE_PATH_PK
 
-#### FORM_METHOD_OVERRIDE
+If set, this maps the `'pk'` identifier in the URL conf onto the actual field
+name when generating a schema path parameter. Typically this will be `'id'`.
+This gives a more suitable representation as "primary key" is an implementation
+detail, whereas "identifier" is a more general concept.
 
-The name of a form field that may be used to override the HTTP method of the form.
+Default: `True`
 
-If the value of this setting is `None` then form method overloading will be disabled.
+#### SCHEMA_COERCE_METHOD_NAMES
 
-Default: `'_method'`
+If set, this is used to map internal viewset method names onto external action
+names used in the schema generation. This allows us to generate names that
+are more suitable for an external representation than those that are used
+internally in the codebase.
 
-#### FORM_CONTENT_OVERRIDE
+Default: `{'retrieve': 'read', 'destroy': 'delete'}`
 
-The name of a form field that may be used to override the content of the form payload.  Must be used together with `FORM_CONTENTTYPE_OVERRIDE`.
+---
 
-If either setting is `None` then form content overloading will be disabled.
-
-Default: `'_content'`
-
-#### FORM_CONTENTTYPE_OVERRIDE
-
-The name of a form field that may be used to override the content type of the form payload.  Must be used together with `FORM_CONTENT_OVERRIDE`.
-
-If either setting is `None` then form content overloading will be disabled.
-
-Default: `'_content_type'`
-
-#### URL_ACCEPT_OVERRIDE
-
-The name of a URL parameter that may be used to override the HTTP `Accept` header.
-
-If the value of this setting is `None` then URL accept overloading will be disabled.
-
-Default: `'accept'`
+## Content type controls
 
 #### URL_FORMAT_OVERRIDE
 
-The name of a URL parameter that may be used to override the default `Accept` header based content negotiation.
+The name of a URL parameter that may be used to override the default content negotiation `Accept` header behavior, by using a `format=…` query parameter in the request URL.
+
+For example: `http://example.com/organizations/?format=csv`
+
+If the value of this setting is `None` then URL format overrides will be disabled.
+
+Default: `'format'`
+
+#### FORMAT_SUFFIX_KWARG
+
+The name of a parameter in the URL conf that may be used to provide a format suffix. This setting is applied when using `format_suffix_patterns` to include suffixed URL patterns.
+
+For example: `http://example.com/organizations.csv/`
 
 Default: `'format'`
 
@@ -271,7 +296,7 @@ A format string that should be used by default for rendering the output of `Date
 
 May be any of `None`, `'iso-8601'` or a Python [strftime format][strftime] string.
 
-Default: `None`
+Default: `'iso-8601'`
 
 #### DATETIME_INPUT_FORMATS
 
@@ -287,7 +312,7 @@ A format string that should be used by default for rendering the output of `Date
 
 May be any of `None`, `'iso-8601'` or a Python [strftime format][strftime] string.
 
-Default: `None`
+Default: `'iso-8601'`
 
 #### DATE_INPUT_FORMATS
 
@@ -303,7 +328,7 @@ A format string that should be used by default for rendering the output of `Time
 
 May be any of `None`, `'iso-8601'` or a Python [strftime format][strftime] string.
 
-Default: `None`
+Default: `'iso-8601'`
 
 #### TIME_INPUT_FORMATS
 
@@ -312,6 +337,54 @@ A list of format strings that should be used by default for parsing inputs to `T
 May be a list including the string `'iso-8601'` or Python [strftime format][strftime] strings.
 
 Default: `['iso-8601']`
+
+---
+
+## Encodings
+
+#### UNICODE_JSON
+
+When set to `True`, JSON responses will allow unicode characters in responses. For example:
+
+    {"unicode black star":"★"}
+
+When set to `False`, JSON responses will escape non-ascii characters, like so:
+
+    {"unicode black star":"\u2605"}
+
+Both styles conform to [RFC 4627][rfc4627], and are syntactically valid JSON. The unicode style is preferred as being more user-friendly when inspecting API responses.
+
+Default: `True`
+
+#### COMPACT_JSON
+
+When set to `True`, JSON responses will return compact representations, with no spacing after `':'` and `','` characters. For example:
+
+    {"is_admin":false,"email":"jane@example"}
+
+When set to `False`, JSON responses will return slightly more verbose representations, like so:
+
+    {"is_admin": false, "email": "jane@example"}
+
+The default style is to return minified responses, in line with [Heroku's API design guidelines][heroku-minified-json].
+
+Default: `True`
+
+#### STRICT_JSON
+
+When set to `True`, JSON rendering and parsing will only observe syntactically valid JSON, raising an exception for the extended float values (`nan`, `inf`, `-inf`) accepted by Python's `json` module. This is the recommended setting, as these values are not generally supported. e.g., neither Javascript's `JSON.Parse` nor PostgreSQL's JSON data type accept these values.
+
+When set to `False`, JSON rendering and parsing will be permissive. However, these values are still invalid and will need to be specially handled in your code.
+
+Default: `True`
+
+#### COERCE_DECIMAL_TO_STRING
+
+When returning decimal objects in API representations that do not support a native decimal type, it is normally best to return the value as a string. This avoids the loss of precision that occurs with binary floating point implementations.
+
+When set to `True`, the serializer `DecimalField` class will return strings instead of `Decimal` objects. When set to `False`, serializers will return `Decimal` objects, which the default JSON encoder will return as floats.
+
+Default: `True`
 
 ---
 
@@ -325,10 +398,15 @@ A string representing the function that should be used when generating view name
 
 This should be a function with the following signature:
 
-    view_name(cls, suffix=None)
+    view_name(self)
 
-* `cls`: The view class.  Typically the name function would inspect the name of the class when generating a descriptive name, by accessing `cls.__name__`.
-* `suffix`: The optional suffix used when differentiating individual views in a viewset.
+* `self`: The view instance.  Typically the name function would inspect the name of the class when generating a descriptive name, by accessing `self.__class__.__name__`.
+
+If the view instance inherits `ViewSet`, it may have been initialized with several optional arguments:
+
+* `name`: A name expliticly provided to a view in the viewset. Typically, this value should be used as-is when provided.
+* `suffix`: Text used when differentiating individual views in a viewset. This argument is mutually exclusive to `name`.
+* `detail`: Boolean that differentiates an individual view in a viewset as either being a 'list' or 'detail' view.
 
 Default: `'rest_framework.views.get_view_name'`
 
@@ -340,12 +418,32 @@ This setting can be changed to support markup styles other than the default mark
 
 This should be a function with the following signature:
 
-    view_description(cls, html=False)
+    view_description(self, html=False)
 
-* `cls`: The view class.  Typically the description function would inspect the docstring of the class when generating a description, by accessing `cls.__doc__`
+* `self`: The view instance.  Typically the description function would inspect the docstring of the class when generating a description, by accessing `self.__class__.__doc__`
 * `html`: A boolean indicating if HTML output is required.  `True` when used in the browsable API, and `False` when used in generating `OPTIONS` responses.
 
+If the view instance inherits `ViewSet`, it may have been initialized with several optional arguments:
+
+* `description`: A description explicitly provided to the view in the viewset. Typically, this is set by extra viewset `action`s, and should be used as-is.
+
 Default: `'rest_framework.views.get_view_description'`
+
+## HTML Select Field cutoffs
+
+Global settings for [select field cutoffs for rendering relational fields](relations.md#select-field-cutoffs) in the browsable API.
+
+#### HTML_SELECT_CUTOFF
+
+Global setting for the `html_cutoff` value.  Must be an integer.
+
+Default: 1000
+
+#### HTML_SELECT_CUTOFF_TEXT
+
+A string representing a global setting for `html_cutoff_text`.
+
+Default: `"More than {count} items..."`
 
 ---
 
@@ -359,11 +457,17 @@ This setting can be changed to support error responses other than the default `{
 
 This should be a function with the following signature:
 
-    exception_handler(exc)
+    exception_handler(exc, context)
 
 * `exc`: The exception.
 
 Default: `'rest_framework.views.exception_handler'`
+
+#### NON_FIELD_ERRORS_KEY
+
+A string representing the key that should be used for serializer errors that do not refer to a specific field, but are instead general errors.
+
+Default: `'non_field_errors'`
 
 #### URL_FIELD_NAME
 
@@ -371,11 +475,13 @@ A string representing the key that should be used for the URL fields generated b
 
 Default: `'url'`
 
-#### FORMAT_SUFFIX_KWARG
+#### NUM_PROXIES
 
-The name of a parameter in the URL conf that may be used to provide a format suffix.
+An integer of 0 or more, that may be used to specify the number of application proxies that the API runs behind.  This allows throttling to more accurately identify client IP addresses.  If set to `None` then less strict IP matching will be used by the throttle classes.
 
-Default: `'format'`
+Default: `None`
 
-[cite]: http://www.python.org/dev/peps/pep-0020/
-[strftime]: http://docs.python.org/2/library/time.html#time.strftime
+[cite]: https://www.python.org/dev/peps/pep-0020/
+[rfc4627]: https://www.ietf.org/rfc/rfc4627.txt
+[heroku-minified-json]: https://github.com/interagent/http-api-design#keep-json-minified-in-all-responses
+[strftime]: https://docs.python.org/3/library/time.html#time.strftime

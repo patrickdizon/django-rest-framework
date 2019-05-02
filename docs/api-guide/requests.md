@@ -1,4 +1,4 @@
-<a class="github" href="request.py"></a>
+source: request.py
 
 # Requests
 
@@ -14,26 +14,21 @@ REST framework's `Request` class extends the standard `HttpRequest`, adding supp
 
 REST framework's Request objects provide flexible request parsing that allows you to treat requests with JSON data or other media types in the same way that you would normally deal with form data.
 
-## .DATA
+## .data
 
-`request.DATA` returns the parsed content of the request body.  This is similar to the standard `request.POST` attribute except that:
+`request.data` returns the parsed content of the request body.  This is similar to the standard `request.POST` and `request.FILES` attributes except that:
 
+* It includes all parsed content, including *file and non-file* inputs.
 * It supports parsing the content of HTTP methods other than `POST`, meaning that you can access the content of `PUT` and `PATCH` requests.
 * It supports REST framework's flexible request parsing, rather than just supporting form data.  For example you can handle incoming JSON data in the same way that you handle incoming form data.
 
 For more details see the [parsers documentation].
 
-## .FILES
+## .query_params
 
-`request.FILES` returns any uploaded files that may be present in the content of the request body.  This is the same as the standard `HttpRequest` behavior, except that the same flexible request parsing is used for `request.DATA`.
+`request.query_params` is a more correctly named synonym for `request.GET`.
 
-For more details see the [parsers documentation].
-
-## .QUERY_PARAMS
-
-`request.QUERY_PARAMS` is a more correctly named synonym for `request.GET`.
-
-For clarity inside your code, we recommend using `request.QUERY_PARAMS` instead of the usual `request.GET`, as *any* HTTP method type may include query parameters.
+For clarity inside your code, we recommend using `request.query_params` instead of the Django's standard `request.GET`. Doing so will help keep your codebase more correct and obvious - any HTTP method type may include query parameters, not just `GET` requests.
 
 ## .parsers
 
@@ -43,9 +38,23 @@ You won't typically need to access this property.
 
 ---
 
-**Note:** If a client sends malformed content, then accessing `request.DATA` or `request.FILES` may raise a `ParseError`.  By default REST framework's `APIView` class or `@api_view` decorator will catch the error and return a `400 Bad Request` response.
+**Note:** If a client sends malformed content, then accessing `request.data` may raise a `ParseError`.  By default REST framework's `APIView` class or `@api_view` decorator will catch the error and return a `400 Bad Request` response.
 
 If a client sends a request with a content-type that cannot be parsed then a `UnsupportedMediaType` exception will be raised, which by default will be caught and return a `415 Unsupported Media Type` response.
+
+---
+
+# Content negotiation
+
+The request exposes some properties that allow you to determine the result of the content negotiation stage. This allows you to implement behaviour such as selecting a different serialisation schemes for different media types.
+
+## .accepted_renderer
+
+The renderer instance that was selected by the content negotiation stage.
+
+## .accepted_media_type
+
+A string representing the media type that was accepted by the content negotiation stage.
 
 ---
 
@@ -81,6 +90,10 @@ You won't typically need to access this property.
 
 ---
 
+**Note:** You may see a `WrappedAttributeError` raised when calling the `.user` or `.auth` properties. These errors originate from an authenticator as a standard `AttributeError`, however it's necessary that they be re-raised as a different exception type in order to prevent them from being suppressed by the outer property access. Python will not recognize that the `AttributeError` orginates from the authenticator and will instead assume that the request object does not have a `.user` or `.auth` property. The authenticator will need to be fixed.
+
+---
+
 # Browser enhancements
 
 REST framework supports a few browser enhancements such as browser-based `PUT`, `PATCH` and `DELETE` forms.
@@ -91,7 +104,7 @@ REST framework supports a few browser enhancements such as browser-based `PUT`, 
 
 Browser-based `PUT`, `PATCH` and `DELETE` forms are transparently supported.
 
-For more information see the [browser enhancements documentation].    
+For more information see the [browser enhancements documentation].
 
 ## .content_type
 
@@ -101,17 +114,13 @@ You won't typically need to directly access the request's content type, as you'l
 
 If you do need to access the content type of the request you should use the `.content_type` property in preference to using `request.META.get('HTTP_CONTENT_TYPE')`, as it provides transparent support for browser-based non-form content.
 
-For more information see the [browser enhancements documentation].    
+For more information see the [browser enhancements documentation].
 
 ## .stream
 
 `request.stream` returns a stream representing the content of the request body.
 
 You won't typically need to directly access the request's content, as you'll normally rely on REST framework's default request parsing behavior.
-
-If you do need to access the raw content directly, you should use the `.stream` property in preference to using `request.content`, as it provides transparent support for browser-based non-form content.
-
-For more information see the [browser enhancements documentation].    
 
 ---
 
